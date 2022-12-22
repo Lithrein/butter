@@ -10,6 +10,7 @@ fn main() {
             width: 800,
             height: 600,
         },
+        ..Default::default()
     };
 
     winit::ButterRunner::run(&engine, &window_settings);
