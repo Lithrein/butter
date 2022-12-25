@@ -1,3 +1,4 @@
+use pollster;
 use winit::{
     dpi::{PhysicalSize, Size},
     event::{Event, WindowEvent},
@@ -14,7 +15,7 @@ impl ButterRunner {
     /// # Panics
     ///
     /// This may panic if the window creation fails
-    pub fn run(_engine: &ButterEngine, window_settings: &window::Settings) {
+    pub fn run(mut engine: ButterEngine, window_settings: &window::Settings) {
         #[cfg(target_arch = "wasm32")]
         use winit::platform::web::WindowBuilderExtWebSys;
 
@@ -31,7 +32,11 @@ impl ButterRunner {
 
         #[cfg(target_arch = "wasm32")]
         {
+            use console_error_panic_hook;
             use wasm_bindgen::JsCast;
+
+            std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+
             let web_window = web_sys::window().unwrap();
             let document = web_window.document().unwrap();
             let canvas = document
@@ -47,6 +52,7 @@ impl ButterRunner {
         }
 
         let window = window_builder.build(&event_loop).unwrap();
+        engine.set_graphic_state(pollster::block_on(crate::graphics::State::new(&window)));
 
         event_loop.run(move |event, _, control_flow| {
             control_flow.set_poll();
@@ -57,6 +63,9 @@ impl ButterRunner {
                     ..
                 } => {
                     control_flow.set_exit();
+                }
+                Event::RedrawRequested(window_id) if window_id == window.id() => {
+                    engine.render();
                 }
                 Event::MainEventsCleared => {
                     window.request_redraw();
