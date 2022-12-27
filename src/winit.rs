@@ -40,12 +40,15 @@ impl ButterRunner {
 
             let web_window = web_sys::window().unwrap();
             let document = web_window.document().unwrap();
+
+            let canvas_id = if let Some(canvas_id) = window_settings.canvas_id.as_ref() {
+                canvas_id
+            } else {
+                "butter-app"
+            };
+
             let canvas = document
-                .get_element_by_id(
-                    window_settings
-                        .canvas_id
-                        .expect("No canvas id specified for the wasm build"),
-                )
+                .get_element_by_id(canvas_id)
                 .unwrap()
                 .dyn_into::<web_sys::HtmlCanvasElement>()
                 .ok();
