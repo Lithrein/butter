@@ -1,9 +1,9 @@
 #[derive(Default)]
-pub struct Settings<'a> {
-    pub title: &'a str,
+pub struct Settings {
+    pub title: String,
     pub size: Size,
     /// The canvas used in the wasm build
-    pub canvas_id: Option<&'a str>,
+    pub canvas_id: Option<String>,
 }
 
 pub struct Size {

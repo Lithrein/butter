@@ -6,7 +6,7 @@ use winit::{
     window::WindowBuilder,
 };
 
-use crate::{window, ButterEngine};
+use crate::ButterEngine;
 
 pub struct ButterRunner;
 impl ButterRunner {
@@ -15,19 +15,20 @@ impl ButterRunner {
     /// # Panics
     ///
     /// This may panic if the window creation fails
-    pub fn run(mut engine: ButterEngine, window_settings: &window::Settings) {
+    pub fn run(mut engine: ButterEngine) {
         #[cfg(target_arch = "wasm32")]
         use winit::platform::web::WindowBuilderExtWebSys;
 
         let event_loop = EventLoop::new();
 
+        let window_settings = &engine.settings().window_settings;
         #[allow(unused_mut)]
         let mut window_builder = WindowBuilder::new()
             .with_inner_size(Size::Physical(PhysicalSize {
                 width: window_settings.size.width,
                 height: window_settings.size.height,
             }))
-            .with_title(window_settings.title)
+            .with_title(&window_settings.title)
             .with_resizable(false);
 
         #[cfg(target_arch = "wasm32")]
