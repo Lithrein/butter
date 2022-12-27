@@ -1,17 +1,14 @@
-use butter::window;
+use butter::{Settings, window};
 use butter::winit;
 use butter::ButterEngine;
 
 fn main() {
-    let engine = ButterEngine;
-    let window_settings = window::Settings {
-        title: "Window",
-        size: window::Size {
-            width: 800,
-            height: 600,
-        },
-        ..Default::default()
-    };
+    let engine = ButterEngine::with_settings(Settings {
+        window_settings: window::Settings {
+            title: "Window".into(),
+            ..Default::default()
+        }
+    });
 
-    winit::ButterRunner::run(&engine, &window_settings);
+    winit::ButterRunner::run(engine);
 }
