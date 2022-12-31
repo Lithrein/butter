@@ -33,7 +33,6 @@ impl ButterRunner {
 
         #[cfg(target_arch = "wasm32")]
         {
-            use console_error_panic_hook;
             use wasm_bindgen::JsCast;
 
             std::panic::set_hook(Box::new(console_error_panic_hook::hook));
@@ -41,12 +40,7 @@ impl ButterRunner {
             let web_window = web_sys::window().unwrap();
             let document = web_window.document().unwrap();
 
-            let canvas_id = if let Some(canvas_id) = window_settings.canvas_id.as_ref() {
-                canvas_id
-            } else {
-                "butter-app"
-            };
-
+            let canvas_id = &window_settings.wasm_canvas_id;
             let canvas = document
                 .get_element_by_id(canvas_id)
                 .unwrap()
