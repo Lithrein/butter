@@ -4,8 +4,8 @@ pub(crate) struct State {
     surface: wgpu::Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
-    config: wgpu::SurfaceConfiguration,
-    size: winit::dpi::PhysicalSize<u32>,
+    _config: wgpu::SurfaceConfiguration,
+    _size: winit::dpi::PhysicalSize<u32>,
 }
 
 impl State {
@@ -53,8 +53,8 @@ impl State {
             surface,
             device,
             queue,
-            config,
-            size,
+            _config: config,
+            _size: size,
         }
     }
 
