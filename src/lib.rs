@@ -1,5 +1,6 @@
 #![warn(clippy::pedantic)]
 
+pub mod ecs;
 pub mod graphics;
 pub mod window;
 pub mod winit;
