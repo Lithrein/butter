@@ -1,5 +1,5 @@
 use crate::ecs::bitset::Bitset;
-use std::{alloc::Layout, any::TypeId, collections::HashMap, ptr::NonNull};
+use std::{alloc::Layout, any::TypeId, collections::HashMap, marker::PhantomData, ptr::NonNull};
 
 mod bitset;
 
@@ -43,16 +43,36 @@ impl Ecs {
 
     #[must_use]
     pub fn component<C: 'static>(&self, entity_index: EntityIndex) -> Option<&C> {
-        self.component_stores
-            .get(&TypeId::of::<C>())?
-            .get::<C>(entity_index.index)
+        self.component_at_index(entity_index.index)
     }
 
     #[must_use]
     pub fn component_mut<C: 'static>(&self, entity_index: EntityIndex) -> Option<&mut C> {
+        self.component_mut_at_index(entity_index.index)
+    }
+
+    fn component_at_index<C: 'static>(&self, index: usize) -> Option<&C> {
         self.component_stores
             .get(&TypeId::of::<C>())?
-            .get_mut::<C>(entity_index.index)
+            .get::<C>(index)
+    }
+
+    fn component_mut_at_index<C: 'static>(&self, index: usize) -> Option<&mut C> {
+        self.component_stores
+            .get(&TypeId::of::<C>())?
+            .get_mut::<C>(index)
+    }
+
+    #[must_use]
+    pub fn query<'a, Q>(&'a self) -> QueryIter<'a, Q>
+    where
+        Q: QueryDescription<'a>,
+    {
+        QueryIter {
+            ecs: self,
+            current_index: 0,
+            _marker: PhantomData,
+        }
     }
 
     fn allocate_index(&mut self) -> EntityIndex {
@@ -114,6 +134,66 @@ pub struct EntityIndex {
     generation: usize,
 }
 
+pub trait QueryDescription<'a> {
+    type Item;
+
+    fn fetch(ecs: &'a Ecs, index: usize) -> Option<Self::Item>;
+}
+
+impl<'a, T: 'static> QueryDescription<'a> for &T {
+    type Item = &'a T;
+
+    fn fetch(ecs: &'a Ecs, index: usize) -> Option<Self::Item> {
+        ecs.component_at_index::<T>(index)
+    }
+}
+
+impl<'a, T: 'static> QueryDescription<'a> for &mut T {
+    type Item = &'a mut T;
+
+    fn fetch(ecs: &'a Ecs, index: usize) -> Option<Self::Item> {
+        ecs.component_mut_at_index::<T>(index)
+    }
+}
+
+impl<'a, A, B> QueryDescription<'a> for (A, B)
+where
+    A: 'static + QueryDescription<'a>,
+    B: 'static + QueryDescription<'a>,
+{
+    type Item = (A::Item, B::Item);
+
+    fn fetch(ecs: &'a Ecs, index: usize) -> Option<Self::Item> {
+        Some((A::fetch(ecs, index)?, B::fetch(ecs, index)?))
+    }
+}
+
+pub struct QueryIter<'a, Q>
+where
+    Q: QueryDescription<'a>,
+{
+    ecs: &'a Ecs,
+    current_index: usize,
+    _marker: PhantomData<&'a Q>,
+}
+
+impl<'a, Q> Iterator for QueryIter<'a, Q>
+where
+    Q: QueryDescription<'a>,
+{
+    type Item = Q::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current_index > self.ecs.next_index {
+            return None;
+        }
+
+        let next = Q::fetch(self.ecs, self.current_index);
+        self.current_index += 1;
+        next
+    }
+}
+
 const BITSET_BIT_COUNT: usize = 65536;
 const fn bitset_word_count<T>() -> usize {
     BITSET_BIT_COUNT / (std::mem::size_of::<T>() * 8)
@@ -163,11 +243,19 @@ impl ComponentStore {
             return None;
         }
 
+        if !self.entities_bitset.bit(index) {
+            return None;
+        }
+
         unsafe { Some(&*self.ptr_at(index).cast::<C>()) }
     }
 
     pub fn get_mut<C>(&self, index: usize) -> Option<&mut C> {
         if index >= self.len {
+            return None;
+        }
+
+        if !self.entities_bitset.bit(index) {
             return None;
         }
 
@@ -370,5 +458,41 @@ mod tests {
         health_component.0 = 5;
         let health_component = ecs.component::<Health>(player).unwrap();
         assert_eq!(health_component, &Health(5));
+    }
+
+    #[test]
+    fn ecs_query() {
+        let mut ecs = Ecs::new();
+        let _player = ecs.insert((Player, Health(10)));
+        let _enemy = ecs.insert((Enemy, Health(5)));
+        let mut health_iter = ecs.query::<&Health>();
+        assert_eq!(health_iter.next(), Some(&Health(10)));
+        assert_eq!(health_iter.next(), Some(&Health(5)));
+        assert_eq!(health_iter.next(), None);
+    }
+
+    #[test]
+    fn ecs_query_multiple() {
+        let mut ecs = Ecs::new();
+        let _player = ecs.insert((Player, Health(10)));
+        let _enemy = ecs.insert((Enemy, Health(5)));
+        let mut health_iter = ecs.query::<(&Player, &mut Health)>();
+        assert_eq!(health_iter.next(), Some((&Player, &mut Health(10))));
+        assert_eq!(health_iter.next(), None);
+    }
+
+    #[test]
+    fn ecs_query_mut() {
+        let mut ecs = Ecs::new();
+        let _player = ecs.insert((Player, Health(10)));
+        let _enemy = ecs.insert((Enemy, Health(5)));
+        for health in ecs.query::<&mut Health>() {
+            health.0 = 0;
+        }
+
+        let mut health_iter = ecs.query::<&Health>();
+        assert_eq!(health_iter.next(), Some(&Health(0)));
+        assert_eq!(health_iter.next(), Some(&Health(0)));
+        assert_eq!(health_iter.next(), None);
     }
 }
