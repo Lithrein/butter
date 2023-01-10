@@ -116,17 +116,31 @@ impl Default for Ecs {
 pub trait EntityDefinition {
     fn store_component(self, ecs: &mut Ecs, index: usize);
 }
-impl<A: 'static> EntityDefinition for (A,) {
-    fn store_component(self, ecs: &mut Ecs, index: usize) {
-        ecs.store_component(index, self.0);
+
+macro_rules! impl_entity_definition_for_tuple {
+    ($($t:tt: $i:tt,)*) => {
+        impl<$($t: 'static,)*> EntityDefinition for ($($t,)*) {
+            fn store_component(self, ecs: &mut Ecs, index: usize) {
+                $(ecs.store_component(index, self.$i);)*
+            }
+        }
     }
 }
-impl<A: 'static, B: 'static> EntityDefinition for (A, B) {
-    fn store_component(self, ecs: &mut Ecs, index: usize) {
-        ecs.store_component(index, self.0);
-        ecs.store_component(index, self.1);
-    }
-}
+
+impl_entity_definition_for_tuple!(A: 0,);
+impl_entity_definition_for_tuple!(A: 0, B: 1,);
+impl_entity_definition_for_tuple!(A: 0, B: 1, C: 2,);
+impl_entity_definition_for_tuple!(A: 0, B: 1, C: 2, D: 3,);
+impl_entity_definition_for_tuple!(A: 0, B: 1, C: 2, D: 3, E: 4,);
+impl_entity_definition_for_tuple!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5,);
+impl_entity_definition_for_tuple!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6,);
+impl_entity_definition_for_tuple!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7,);
+impl_entity_definition_for_tuple!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7, I: 8,);
+impl_entity_definition_for_tuple!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7, I: 8, J: 9,);
+impl_entity_definition_for_tuple!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7, I: 8, J: 9, K: 10,);
+impl_entity_definition_for_tuple!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7, I: 8, J: 9, K: 10, L: 11,);
+impl_entity_definition_for_tuple!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7, I: 8, J: 9, K: 10, L: 11, M: 12,);
+impl_entity_definition_for_tuple!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7, I: 8, J: 9, K: 10, L: 11, M: 12, N: 13,);
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct EntityIndex {
@@ -156,17 +170,35 @@ impl<'a, T: 'static> QueryDescription<'a> for &mut T {
     }
 }
 
-impl<'a, A, B> QueryDescription<'a> for (A, B)
-where
-    A: 'static + QueryDescription<'a>,
-    B: 'static + QueryDescription<'a>,
-{
-    type Item = (A::Item, B::Item);
+macro_rules! impl_query_description_for_tuple {
+    ($($t:tt,)*) => {
+        impl<'a, $($t),*> QueryDescription<'a> for ($($t,)*)
+        where
+            $($t: 'static + QueryDescription<'a>,)*
+        {
+            type Item = ($($t::Item,)*);
 
-    fn fetch(ecs: &'a Ecs, index: usize) -> Option<Self::Item> {
-        Some((A::fetch(ecs, index)?, B::fetch(ecs, index)?))
-    }
+            fn fetch(ecs: &'a Ecs, index: usize) -> Option<Self::Item> {
+                Some(($($t::fetch(ecs, index)?,)*))
+            }
+        }
+    };
 }
+
+impl_query_description_for_tuple!(A,);
+impl_query_description_for_tuple!(A, B,);
+impl_query_description_for_tuple!(A, B, C,);
+impl_query_description_for_tuple!(A, B, C, D,);
+impl_query_description_for_tuple!(A, B, C, D, E,);
+impl_query_description_for_tuple!(A, B, C, D, E, F,);
+impl_query_description_for_tuple!(A, B, C, D, E, F, G,);
+impl_query_description_for_tuple!(A, B, C, D, E, F, G, H,);
+impl_query_description_for_tuple!(A, B, C, D, E, F, G, H, I,);
+impl_query_description_for_tuple!(A, B, C, D, E, F, G, H, I, J,);
+impl_query_description_for_tuple!(A, B, C, D, E, F, G, H, I, J, K,);
+impl_query_description_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L,);
+impl_query_description_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M,);
+impl_query_description_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N,);
 
 pub struct QueryIter<'a, Q>
 where
@@ -391,6 +423,8 @@ mod tests {
     struct Enemy;
     #[derive(Debug, Eq, PartialEq)]
     struct Health(i16);
+    #[derive(Debug, Eq, PartialEq)]
+    struct Level(u16);
 
     #[test]
     fn ecs_insert() {
@@ -474,11 +508,14 @@ mod tests {
     #[test]
     fn ecs_query_multiple() {
         let mut ecs = Ecs::new();
-        let _player = ecs.insert((Player, Health(10)));
+        let _player = ecs.insert((Player, Level(1), Health(10)));
         let _enemy = ecs.insert((Enemy, Health(5)));
-        let mut health_iter = ecs.query::<(&Player, &mut Health)>();
-        assert_eq!(health_iter.next(), Some((&Player, &mut Health(10))));
-        assert_eq!(health_iter.next(), None);
+        let mut query_iter = ecs.query::<(&Player, &Level, &mut Health)>();
+        assert_eq!(
+            query_iter.next(),
+            Some((&Player, &Level(1), &mut Health(10)))
+        );
+        assert_eq!(query_iter.next(), None);
     }
 
     #[test]
