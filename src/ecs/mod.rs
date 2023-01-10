@@ -1,7 +1,8 @@
 use crate::ecs::bitset::Bitset;
-use std::{alloc::Layout, any::TypeId, collections::HashMap, marker::PhantomData, ptr::NonNull};
+use std::{alloc::Layout, any::TypeId, collections::HashMap, ptr::NonNull};
 
 mod bitset;
+mod query;
 
 pub struct Ecs {
     next_index: usize,
@@ -64,15 +65,11 @@ impl Ecs {
     }
 
     #[must_use]
-    pub fn query<'a, Q>(&'a self) -> QueryIter<'a, Q>
+    pub fn query<'a, Q>(&'a self) -> query::Iter<'a, Q>
     where
-        Q: QueryDescription<'a>,
+        Q: query::Description<'a>,
     {
-        QueryIter {
-            ecs: self,
-            current_index: 0,
-            _marker: PhantomData,
-        }
+        query::Iter::new(self)
     }
 
     fn allocate_index(&mut self) -> EntityIndex {
@@ -146,84 +143,6 @@ impl_entity_definition_for_tuple!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7
 pub struct EntityIndex {
     index: usize,
     generation: usize,
-}
-
-pub trait QueryDescription<'a> {
-    type Item;
-
-    fn fetch(ecs: &'a Ecs, index: usize) -> Option<Self::Item>;
-}
-
-impl<'a, T: 'static> QueryDescription<'a> for &T {
-    type Item = &'a T;
-
-    fn fetch(ecs: &'a Ecs, index: usize) -> Option<Self::Item> {
-        ecs.component_at_index::<T>(index)
-    }
-}
-
-impl<'a, T: 'static> QueryDescription<'a> for &mut T {
-    type Item = &'a mut T;
-
-    fn fetch(ecs: &'a Ecs, index: usize) -> Option<Self::Item> {
-        ecs.component_mut_at_index::<T>(index)
-    }
-}
-
-macro_rules! impl_query_description_for_tuple {
-    ($($t:tt,)*) => {
-        impl<'a, $($t),*> QueryDescription<'a> for ($($t,)*)
-        where
-            $($t: 'static + QueryDescription<'a>,)*
-        {
-            type Item = ($($t::Item,)*);
-
-            fn fetch(ecs: &'a Ecs, index: usize) -> Option<Self::Item> {
-                Some(($($t::fetch(ecs, index)?,)*))
-            }
-        }
-    };
-}
-
-impl_query_description_for_tuple!(A,);
-impl_query_description_for_tuple!(A, B,);
-impl_query_description_for_tuple!(A, B, C,);
-impl_query_description_for_tuple!(A, B, C, D,);
-impl_query_description_for_tuple!(A, B, C, D, E,);
-impl_query_description_for_tuple!(A, B, C, D, E, F,);
-impl_query_description_for_tuple!(A, B, C, D, E, F, G,);
-impl_query_description_for_tuple!(A, B, C, D, E, F, G, H,);
-impl_query_description_for_tuple!(A, B, C, D, E, F, G, H, I,);
-impl_query_description_for_tuple!(A, B, C, D, E, F, G, H, I, J,);
-impl_query_description_for_tuple!(A, B, C, D, E, F, G, H, I, J, K,);
-impl_query_description_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L,);
-impl_query_description_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M,);
-impl_query_description_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N,);
-
-pub struct QueryIter<'a, Q>
-where
-    Q: QueryDescription<'a>,
-{
-    ecs: &'a Ecs,
-    current_index: usize,
-    _marker: PhantomData<&'a Q>,
-}
-
-impl<'a, Q> Iterator for QueryIter<'a, Q>
-where
-    Q: QueryDescription<'a>,
-{
-    type Item = Q::Item;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.current_index > self.ecs.next_index {
-            return None;
-        }
-
-        let next = Q::fetch(self.ecs, self.current_index);
-        self.current_index += 1;
-        next
-    }
 }
 
 const BITSET_BIT_COUNT: usize = 65536;
