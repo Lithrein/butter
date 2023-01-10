@@ -1,8 +1,11 @@
 use crate::ecs::bitset::Bitset;
 use std::{alloc::Layout, any::TypeId, collections::HashMap, ptr::NonNull};
 
+use self::system::System;
+
 mod bitset;
 mod query;
+mod system;
 
 pub struct Ecs {
     next_index: usize,
@@ -32,6 +35,13 @@ impl Ecs {
         let entity_index = self.allocate_index();
         entity_definition.store_component(self, entity_index.index);
         entity_index
+    }
+
+    pub fn run_system<'e, S, QD>(&'e self, system: &S)
+    where
+        S: System<'e, QD>,
+    {
+        system.run(self);
     }
 
     pub fn delete(&mut self, entity_index: EntityIndex) {

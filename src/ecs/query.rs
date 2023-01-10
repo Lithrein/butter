@@ -2,10 +2,34 @@ use std::marker::PhantomData;
 
 use super::Ecs;
 
-pub trait Description<'a> {
+pub trait Description<'e> {
     type Item;
 
-    fn fetch(ecs: &'a Ecs, index: usize) -> Option<Self::Item>;
+    fn fetch(ecs: &'e Ecs, index: usize) -> Option<Self::Item>;
+}
+
+pub struct Query<'e, D>
+where
+    D: for<'d> Description<'d>,
+{
+    ecs: &'e Ecs,
+    _marker: PhantomData<D>,
+}
+
+impl<'e, D> Query<'e, D>
+where
+    D: for<'d> Description<'d>,
+{
+    pub fn new(ecs: &'e Ecs) -> Self {
+        Self {
+            ecs,
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn iter(&self) -> Iter<D> {
+        Iter::new(self.ecs)
+    }
 }
 
 impl<'a, T: 'static> Description<'a> for &T {
