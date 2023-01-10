@@ -2,6 +2,7 @@ use std::{alloc::Layout, any::TypeId, collections::HashMap, ptr::NonNull};
 
 pub struct Ecs {
     next_index: usize,
+    deleted_entities_indices: Vec<EntityIndex>,
     component_stores: HashMap<TypeId, ComponentStore>,
 }
 
@@ -10,13 +11,14 @@ impl Ecs {
     pub fn new() -> Self {
         Self {
             next_index: 0,
+            deleted_entities_indices: vec![],
             component_stores: HashMap::new(),
         }
     }
 
     #[must_use]
     pub fn entity_count(&self) -> usize {
-        self.next_index
+        self.next_index - self.deleted_entities_indices.len()
     }
 
     pub fn insert<ED>(&mut self, entity_definition: ED) -> EntityIndex
@@ -28,15 +30,43 @@ impl Ecs {
         entity_index
     }
 
+    pub fn delete(&mut self, entity_index: EntityIndex) {
+        for store in self.component_stores.values_mut() {
+            store.remove(entity_index.index);
+        }
+
+        self.deleted_entities_indices.push(entity_index);
+    }
+
+    #[must_use]
+    pub fn component<C: 'static>(&self, entity_index: EntityIndex) -> Option<&C> {
+        self.component_stores
+            .get(&TypeId::of::<C>())?
+            .get::<C>(entity_index.index)
+    }
+
+    #[must_use]
+    pub fn component_mut<C: 'static>(&self, entity_index: EntityIndex) -> Option<&mut C> {
+        self.component_stores
+            .get(&TypeId::of::<C>())?
+            .get_mut::<C>(entity_index.index)
+    }
+
     fn allocate_index(&mut self) -> EntityIndex {
-        // TODO check for reusable indices (from delete entities)
-        let next_index = self.next_index;
-        let index = EntityIndex {
-            index: next_index,
-            generation: 0,
-        };
-        self.next_index += 1;
-        index
+        if let Some(reusable_index) = self.deleted_entities_indices.pop() {
+            EntityIndex {
+                index: reusable_index.index,
+                generation: reusable_index.generation + 1,
+            }
+        } else {
+            let next_index = self.next_index;
+            let index = EntityIndex {
+                index: next_index,
+                generation: 0,
+            };
+            self.next_index += 1;
+            index
+        }
     }
 
     fn store_component<C>(&mut self, index: usize, component: C)
@@ -125,17 +155,53 @@ impl ComponentStore {
         }
     }
 
+    pub fn get<C>(&self, index: usize) -> Option<&C> {
+        if index >= self.len {
+            return None;
+        }
+
+        unsafe { Some(&*self.ptr_at(index).cast::<C>()) }
+    }
+
+    pub fn get_mut<C>(&self, index: usize) -> Option<&mut C> {
+        if index >= self.len {
+            return None;
+        }
+
+        unsafe { Some(&mut *self.ptr_at(index).cast::<C>()) }
+    }
+
+    pub fn ptr(&self) -> *mut u8 {
+        self.data.as_ptr()
+    }
+
+    /// # Safety
+    /// The caller must ensures that index is < self.len
+    pub unsafe fn ptr_at(&self, index: usize) -> *mut u8 {
+        assert!(index < self.len);
+        self.ptr().add(index * self.layout.size())
+    }
+
+    pub fn remove(&mut self, index: usize) {
+        if !self.entities_bitset.bit(index) || index >= self.len {
+            return;
+        }
+
+        self.entities_bitset.unset_bit(index);
+
+        // SAFETY:
+        // index is inside the bounds of the allocated memory
+        unsafe {
+            let ptr = self.ptr_at(index);
+            (self.drop)(ptr);
+        }
+        self.len -= 1;
+    }
+
     pub fn clear(&mut self) {
         let len = self.len;
         for i in 0..len {
-            if self.entities_bitset.bit(i) {
-                self.entities_bitset.unset_bit(i);
-                unsafe {
-                    let ptr = self.data.as_ptr().add(i * self.layout.size());
-                    (self.drop)(ptr);
-                }
-                self.len -= 1;
-            }
+            self.remove(i);
         }
     }
 
@@ -174,8 +240,8 @@ impl ComponentStore {
     /// # Safety
     /// - index must be in the bounds of the allocated chunk of data
     unsafe fn write(&mut self, index: usize, data_ptr: *mut u8) {
-        let dst_ptr = self.data.as_ptr().add(index);
-        std::ptr::copy_nonoverlapping(data_ptr, dst_ptr, 1);
+        let dst_ptr = self.ptr_at(index);
+        std::ptr::copy_nonoverlapping(data_ptr, dst_ptr, self.layout.size());
     }
 }
 
@@ -254,8 +320,11 @@ mod tests {
         assert_eq!(ecs.entity_count(), 0);
     }
 
+    #[derive(Debug, Eq, PartialEq)]
     struct Player;
+    #[derive(Debug, Eq, PartialEq)]
     struct Enemy;
+    #[derive(Debug, Eq, PartialEq)]
     struct Health(i16);
 
     #[test]
@@ -270,6 +339,60 @@ mod tests {
         assert_eq!(entity_index.generation, 0);
 
         assert_eq!(ecs.entity_count(), 2);
+    }
+
+    #[test]
+    fn ecs_remove() {
+        let mut ecs = Ecs::new();
+
+        let player = ecs.insert((Player, Health(10)));
+        assert_eq!(ecs.entity_count(), 1);
+
+        let enemy = ecs.insert((Enemy, Health(5)));
+        assert_eq!(ecs.entity_count(), 2);
+
+        ecs.delete(enemy);
+        assert_eq!(ecs.entity_count(), 1);
+
+        ecs.delete(player);
+        assert_eq!(ecs.entity_count(), 0);
+    }
+
+    #[test]
+    fn ecs_reuse_index() {
+        let mut ecs = Ecs::new();
+
+        let player = ecs.insert((Player, Health(10)));
+        assert_eq!(player.index, 0);
+        assert_eq!(player.generation, 0);
+
+        ecs.delete(player);
+
+        let player = ecs.insert((Player, Health(5)));
+        assert_eq!(player.index, 0);
+        assert_eq!(player.generation, 1);
+    }
+
+    #[test]
+    fn ecs_component() {
+        let mut ecs = Ecs::new();
+        let player = ecs.insert((Player, Health(10)));
+        let player_component = ecs.component::<Player>(player).unwrap();
+        assert_eq!(player_component, &Player);
+        let health_component = ecs.component::<Health>(player).unwrap();
+        assert_eq!(health_component, &Health(10));
+
+        assert_eq!(ecs.component::<Enemy>(player), None);
+    }
+
+    #[test]
+    fn ecs_component_mut() {
+        let mut ecs = Ecs::new();
+        let player = ecs.insert((Player, Health(10)));
+        let health_component = ecs.component_mut::<Health>(player).unwrap();
+        health_component.0 = 5;
+        let health_component = ecs.component::<Health>(player).unwrap();
+        assert_eq!(health_component, &Health(5));
     }
 
     #[test]
