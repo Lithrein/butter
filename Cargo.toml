@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 resolver = "2"
 
+[workspace]
+members = ["crates/*"]
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 
@@ -12,6 +15,7 @@ cfg-if = "1"
 pollster = "^0.2"
 winit = "^0.27"
 wgpu = { version = "^0.14", features = ["webgl"] }
+butter-math = { path = "crates/butter-math", version = "0.1.0" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "^0.1"
