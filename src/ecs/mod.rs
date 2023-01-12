@@ -4,7 +4,7 @@ use std::{alloc::Layout, any::TypeId, collections::HashMap, ptr::NonNull};
 use self::system::System;
 
 mod bitset;
-mod query;
+pub mod query;
 mod system;
 
 pub struct Ecs {
@@ -37,9 +37,9 @@ impl Ecs {
         entity_index
     }
 
-    pub fn run_system<'e, S, QD>(&'e self, system: &S)
+    pub fn run_system<'e, S, P>(&'e self, system: &'e S)
     where
-        S: System<'e, QD>,
+        S: System<'e, P>,
     {
         system.run(self);
     }

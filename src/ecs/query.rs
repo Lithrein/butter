@@ -10,7 +10,7 @@ pub trait Description<'e> {
 
 pub struct Query<'e, D>
 where
-    D: for<'d> Description<'d>,
+    D: 'static + for<'d> Description<'d>,
 {
     ecs: &'e Ecs,
     _marker: PhantomData<D>,
@@ -20,6 +20,7 @@ impl<'e, D> Query<'e, D>
 where
     D: for<'d> Description<'d>,
 {
+    #[must_use]
     pub fn new(ecs: &'e Ecs) -> Self {
         Self {
             ecs,
@@ -27,6 +28,7 @@ where
         }
     }
 
+    #[must_use]
     pub fn iter(&self) -> Iter<D> {
         Iter::new(self.ecs)
     }
@@ -111,8 +113,17 @@ where
             return None;
         }
 
-        let next = Q::fetch(self.ecs, self.current_index);
+        let mut next = Q::fetch(self.ecs, self.current_index);
         self.current_index += 1;
+
+        // FIXME: Use the bitset to skip the entities that don't match the query
+        while next.is_none() {
+            if self.current_index > self.ecs.next_index {
+                return None;
+            }
+            next = Q::fetch(self.ecs, self.current_index);
+            self.current_index += 1;
+        }
         next
     }
 }

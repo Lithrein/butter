@@ -3,44 +3,92 @@ use super::{
     Ecs,
 };
 
-pub trait System<'e, QD> {
-    fn run(&self, ecs: &'e Ecs);
+pub trait System<'e, P> {
+    fn run(&'e self, ecs: &'e Ecs);
 }
 
-impl<'e, F, QD> System<'e, QD> for F
+pub trait Injectable<'e> {
+    fn inject(ecs: &'e Ecs) -> Self;
+}
+
+impl<'e, QD> Injectable<'e> for Query<'e, QD>
 where
-    F: Fn(&Query<QD>),
     QD: for<'d> Description<'d>,
 {
-    fn run(&self, ecs: &'e Ecs) {
-        (self)(&Query::new(ecs));
+    fn inject(ecs: &'e Ecs) -> Self {
+        Self::new(ecs)
     }
 }
+
+macro_rules! impl_system_for_fun {
+    ($($p:tt,)*) => {
+        impl<'e, FN, $($p,)*> System<'e, ($($p,)*)> for FN
+        where
+            FN: Fn($(&$p,)*),
+            $($p: Injectable<'e>,)*
+        {
+            fn run(&'e self, ecs: &'e Ecs) {
+                (self)($(&$p::inject(ecs),)*);
+            }
+        }
+
+    };
+}
+
+impl_system_for_fun!(A,);
+impl_system_for_fun!(A, B,);
+impl_system_for_fun!(A, B, C,);
+impl_system_for_fun!(A, B, C, D,);
+impl_system_for_fun!(A, B, C, D, E,);
+impl_system_for_fun!(A, B, C, D, E, F,);
+impl_system_for_fun!(A, B, C, D, E, F, G,);
+impl_system_for_fun!(A, B, C, D, E, F, G, H,);
+impl_system_for_fun!(A, B, C, D, E, F, G, H, I,);
+impl_system_for_fun!(A, B, C, D, E, F, G, H, I, J,);
+impl_system_for_fun!(A, B, C, D, E, F, G, H, I, J, K,);
+impl_system_for_fun!(A, B, C, D, E, F, G, H, I, J, K, L,);
+impl_system_for_fun!(A, B, C, D, E, F, G, H, I, J, K, L, M,);
+impl_system_for_fun!(A, B, C, D, E, F, G, H, I, J, K, L, M, N,);
 
 #[cfg(test)]
 mod tests {
     use crate::ecs::{query::Query, Ecs};
 
     #[derive(Debug, PartialEq, Eq)]
+    struct Player;
+    #[derive(Debug, PartialEq, Eq)]
+    struct Enemy;
+    #[derive(Debug, PartialEq, Eq)]
     struct Health(i16);
 
-    fn restore_health_system(query: &Query<&mut Health>) {
-        for health in query.iter() {
+    fn instakill_all_enemies_and_heal_player(
+        players_with_health: &Query<(&Player, &mut Health)>,
+        enemies_with_health: &Query<(&Enemy, &mut Health)>,
+    ) {
+        for (_, health) in players_with_health.iter() {
             health.0 = 10;
+        }
+
+        for (_, health) in enemies_with_health.iter() {
+            health.0 = 0;
         }
     }
 
     #[test]
     fn simple_system() {
         let mut ecs = Ecs::new();
-        ecs.insert((Health(5),));
-        ecs.insert((Health(2),));
-        ecs.insert((Health(1),));
+        ecs.insert((Player, Health(5)));
+        ecs.insert((Enemy, Health(2)));
+        ecs.insert((Enemy, Health(1)));
 
-        ecs.run_system(&restore_health_system);
+        ecs.run_system(&instakill_all_enemies_and_heal_player);
 
-        for health in ecs.query::<&Health>() {
+        for (_, health) in ecs.query::<(&Player, &Health)>() {
             assert_eq!(health, &Health(10));
+        }
+
+        for (_, health) in ecs.query::<(&Enemy, &Health)>() {
+            assert_eq!(health, &Health(0));
         }
     }
 }
