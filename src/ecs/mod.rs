@@ -5,7 +5,7 @@ use self::system::System;
 
 mod bitset;
 pub mod query;
-mod system;
+pub mod system;
 
 pub struct Ecs {
     next_index: usize,
@@ -37,19 +37,19 @@ impl Ecs {
         entity_index
     }
 
-    pub fn run_system<'e, S, P>(&'e self, system: &'e S)
-    where
-        S: System<'e, P>,
-    {
-        system.run(self);
-    }
-
     pub fn delete(&mut self, entity_index: EntityIndex) {
         for store in self.component_stores.values_mut() {
             store.remove(entity_index.index);
         }
 
         self.deleted_entities_indices.push(entity_index);
+    }
+
+    pub fn run_system<S>(&self, system: &mut S)
+    where
+        S: System,
+    {
+        system.run(self);
     }
 
     #[must_use]

@@ -66,6 +66,7 @@ impl ButterRunner {
                     engine.render();
                 }
                 Event::MainEventsCleared => {
+                    engine.update();
                     window.request_redraw();
                 }
                 _ => {}
