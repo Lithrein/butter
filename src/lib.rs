@@ -1,8 +1,8 @@
 #![warn(clippy::pedantic)]
 
-use ecs::{system, Ecs};
+use butter_ecs::{system, Ecs};
 
-pub mod ecs;
+pub use butter_ecs as ecs;
 pub mod graphics;
 pub mod window;
 pub mod winit;

@@ -1,4 +1,4 @@
-use crate::ecs::bitset::Bitset;
+use crate::bitset::Bitset;
 use std::{alloc::Layout, any::TypeId, collections::HashMap, ptr::NonNull};
 
 use self::system::System;

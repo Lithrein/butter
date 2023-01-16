@@ -138,7 +138,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::ecs::query::Query;
+    use crate::query::Query;
 
     use super::*;
 
