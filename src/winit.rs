@@ -51,6 +51,7 @@ impl ButterRunner {
 
         let window = window_builder.build(&event_loop).unwrap();
         engine.set_graphic_state(pollster::block_on(crate::graphics::State::new(&window)));
+        engine.init();
 
         event_loop.run(move |event, _, control_flow| {
             control_flow.set_poll();
