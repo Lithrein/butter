@@ -1,9 +1,12 @@
+use commands::CommandQueue;
+
 use crate::bitset::Bitset;
 use std::{alloc::Layout, any::TypeId, collections::HashMap, ptr::NonNull};
 
 use self::system::System;
 
 mod bitset;
+pub mod commands;
 pub mod query;
 pub mod system;
 
@@ -45,11 +48,35 @@ impl Ecs {
         self.deleted_entities_indices.push(entity_index);
     }
 
-    pub fn run_system<S>(&self, system: &mut S)
+    pub fn run_systems(&mut self, systems: &mut [Box<dyn System>]) {
+        let mut global_command_queue = CommandQueue::new();
+        for system in systems.iter_mut() {
+            self.run_system(system, &mut global_command_queue);
+        }
+
+        self.execute_command_queue(&mut global_command_queue);
+    }
+
+    pub fn run_single_system<S>(&mut self, system: &mut S)
     where
         S: System,
     {
         system.run(self);
+        self.execute_command_queue(system.command_queue());
+    }
+
+    fn run_system<S>(&mut self, system: &mut S, global_command_queue: &mut CommandQueue)
+    where
+        S: System,
+    {
+        system.run(self);
+        global_command_queue.extend(system.command_queue().drain());
+    }
+
+    fn execute_command_queue(&mut self, command_queue: &mut CommandQueue) {
+        for command in command_queue.drain() {
+            command.execute(self);
+        }
     }
 
     #[must_use]

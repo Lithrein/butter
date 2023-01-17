@@ -26,15 +26,11 @@ impl ButterEngine {
     }
 
     pub(crate) fn init(&mut self) {
-        for system in &mut self.init_systems {
-            system.run(&self.ecs);
-        }
+        self.ecs.run_systems(&mut self.init_systems);
     }
 
     pub(crate) fn update(&mut self) {
-        for system in &mut self.systems {
-            system.run(&self.ecs);
-        }
+        self.ecs.run_systems(&mut self.systems);
     }
 
     /// Renders

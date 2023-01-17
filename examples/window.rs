@@ -1,4 +1,6 @@
-use butter::{ecs::query::Query, ButterEngineBuilder};
+use butter::ecs::commands::CommandQueue;
+use butter::ecs::query::Query;
+use butter::ButterEngineBuilder;
 
 pub struct Player(&'static str);
 
@@ -12,15 +14,16 @@ fn main() {
     butter::winit::ButterRunner::run(engine);
 }
 
-fn init() {
-    println!("This system will run once");
+fn init(command_queue: &mut CommandQueue) {
+    command_queue.insert((Player("John Doe"),));
+    command_queue.insert((Player("Jack Doe"),));
 }
 
-fn hello_world() {
+fn hello_world(_: &mut CommandQueue) {
     println!("hello world");
 }
 
-fn hello_player(players: &Query<(&Player,)>) {
+fn hello_player(_: &mut CommandQueue, players: &Query<(&Player,)>) {
     for (player,) in players.iter() {
         println!("hello {}", player.0);
     }

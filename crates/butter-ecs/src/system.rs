@@ -1,4 +1,6 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, ops::DerefMut};
+
+use crate::commands::CommandQueue;
 
 use super::{
     query::{Description, Query},
@@ -7,18 +9,33 @@ use super::{
 
 pub trait System: 'static {
     fn run(&mut self, ecs: &Ecs);
+    fn command_queue(&mut self) -> &mut CommandQueue;
+}
+
+impl System for Box<dyn System> {
+    fn run(&mut self, ecs: &Ecs) {
+        self.deref_mut().run(ecs);
+    }
+
+    fn command_queue(&mut self) -> &mut CommandQueue {
+        self.deref_mut().command_queue()
+    }
 }
 
 macro_rules! impl_system_for_fun {
     ($($p:tt,)*) => {
         impl<FN, $($p),*> System for Function<FN, ($($p,)*)>
         where
-            FN: 'static + for<'ecs> FnMut($(&$p::Type<'ecs>,)*),
+            FN: 'static + for<'ecs> FnMut(&mut CommandQueue, $(&$p::Type<'ecs>,)*),
             $($p: 'static + Parameter,)*
         {
             #[allow(unused_variables)]
             fn run(&mut self, ecs: &Ecs) {
-                (self.system_fn)($(&$p::fetch(ecs),)*)
+                (self.system_fn)(&mut self.command_queue, $(&$p::fetch(ecs),)*)
+            }
+
+            fn command_queue(&mut self) -> &mut CommandQueue {
+                &mut self.command_queue
             }
         }
     };
@@ -97,13 +114,14 @@ macro_rules! impl_into_for_fun {
     ($($t:tt,)*) => {
         impl<FN, $($t,)*> Into<($($t,)*)> for FN
         where
-            FN: 'static + FnMut($(&$t,)*),
+            FN: 'static + FnMut(&mut CommandQueue, $(&$t,)*),
             $($t: Parameter,)*
         {
             type SystemType = Function<FN, ($($t,)*)>;
 
             fn into_system(self) -> Self::SystemType {
                 Function {
+                    command_queue: CommandQueue::new(),
                     system_fn: self,
                     _marker: PhantomData,
                 }
@@ -132,6 +150,7 @@ pub struct Function<F, P>
 where
     P: Parameter,
 {
+    command_queue: CommandQueue,
     system_fn: F,
     _marker: PhantomData<P>,
 }
@@ -149,7 +168,7 @@ mod tests {
         #[derive(Debug, PartialEq, Eq)]
         struct Health(i16);
 
-        fn restore_player_health(query: &Query<(&Player, &mut Health)>) {
+        fn restore_player_health(_: &mut CommandQueue, query: &Query<(&Player, &mut Health)>) {
             for (_, health) in query.iter() {
                 health.0 = 10;
             }
@@ -158,7 +177,7 @@ mod tests {
         let mut ecs = Ecs::new();
         ecs.insert((Player, Health(8)));
         ecs.insert((Player, Health(5)));
-        ecs.run_system(&mut restore_player_health.into_system());
+        ecs.run_single_system(&mut restore_player_health.into_system());
 
         for (_, health) in ecs.query::<(&Player, &Health)>() {
             assert_eq!(health, &Health(10));
@@ -175,6 +194,7 @@ mod tests {
         struct Health(i16);
 
         fn restore_player_health(
+            _: &mut CommandQueue,
             query: &Query<(&Player, &mut Health)>,
             query2: &Query<(&Enemy, &mut Health)>,
         ) {
@@ -192,7 +212,7 @@ mod tests {
         ecs.insert((Player, Health(5)));
         ecs.insert((Enemy, Health(12)));
         ecs.insert((Enemy, Health(9)));
-        ecs.run_system(&mut restore_player_health.into_system());
+        ecs.run_single_system(&mut restore_player_health.into_system());
 
         for (_, health) in ecs.query::<(&Player, &Health)>() {
             assert_eq!(health, &Health(10));
@@ -201,5 +221,24 @@ mod tests {
         for (_, health) in ecs.query::<(&Enemy, &Health)>() {
             assert_eq!(health, &Health(0));
         }
+    }
+
+    #[test]
+    fn system_inserting_entities() {
+        #[derive(Debug, PartialEq, Eq)]
+        struct Player;
+        #[derive(Debug, PartialEq, Eq)]
+        struct Enemy;
+        #[derive(Debug, PartialEq, Eq)]
+        struct Health(i16);
+        fn insert_entities(command_queue: &mut CommandQueue) {
+            command_queue.insert((Player, Health(10)));
+            command_queue.insert((Enemy, Health(8)));
+        }
+
+        let mut ecs = Ecs::new();
+        assert_eq!(ecs.entity_count(), 0);
+        ecs.run_single_system(&mut insert_entities.into_system());
+        assert_eq!(ecs.entity_count(), 2);
     }
 }
