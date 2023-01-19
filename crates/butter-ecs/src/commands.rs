@@ -5,6 +5,7 @@ pub struct CommandQueue {
 }
 
 impl CommandQueue {
+    #[must_use]
     pub fn new() -> Self {
         Self { commands: vec![] }
     }
@@ -14,7 +15,7 @@ impl CommandQueue {
         ED: 'static + EntityDefinition,
     {
         self.commands
-            .push(Box::new(InsertEntityCommand::new(entity_definition)))
+            .push(Box::new(InsertEntityCommand::new(entity_definition)));
     }
 
     pub fn extend<I>(&mut self, iter: I)

@@ -1,3 +1,4 @@
+#![warn(clippy::pedantic)]
 use commands::CommandQueue;
 
 use crate::bitset::Bitset;
