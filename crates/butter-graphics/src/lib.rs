@@ -1,16 +1,23 @@
-use winit::window::Window;
+#![warn(clippy::pedantic)]
 
-pub(crate) struct State {
+use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
+
+pub struct State {
     surface: wgpu::Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
     _config: wgpu::SurfaceConfiguration,
-    _size: winit::dpi::PhysicalSize<u32>,
+    _size: (u32, u32),
 }
 
 impl State {
-    pub(crate) async fn new(window: &Window) -> Self {
-        let size = window.inner_size();
+    /// # Panics
+    ///
+    /// Will panic if no adapter is available or no suitable device is available
+    pub async fn new<W>(window: &W, size: (u32, u32)) -> Self
+    where
+        W: HasRawWindowHandle + HasRawDisplayHandle,
+    {
         let instance = wgpu::Instance::new(wgpu::Backends::all());
         let surface = unsafe { instance.create_surface(window) };
         let adapter = instance
@@ -41,8 +48,8 @@ impl State {
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface.get_supported_formats(&adapter)[0],
-            width: size.width,
-            height: size.height,
+            width: size.0,
+            height: size.1,
             present_mode: wgpu::PresentMode::Fifo,
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
         };
@@ -58,7 +65,10 @@ impl State {
         }
     }
 
-    pub(crate) fn render(&mut self) {
+    /// # Panics
+    ///
+    /// Might panic if getting the next texture to be presented by the swapchain for drawing fails
+    pub fn render(&mut self) {
         let output = self.surface.get_current_texture().unwrap();
         let view = output
             .texture

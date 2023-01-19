@@ -3,7 +3,7 @@
 use butter_ecs::{system, Ecs};
 
 pub use butter_ecs as ecs;
-pub mod graphics;
+pub use butter_graphics as graphics;
 pub mod window;
 pub mod winit;
 
