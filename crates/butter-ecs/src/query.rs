@@ -65,20 +65,22 @@ macro_rules! impl_query_description_for_tuple {
     };
 }
 
-impl_query_description_for_tuple!(A,);
-impl_query_description_for_tuple!(A, B,);
-impl_query_description_for_tuple!(A, B, C,);
-impl_query_description_for_tuple!(A, B, C, D,);
-impl_query_description_for_tuple!(A, B, C, D, E,);
-impl_query_description_for_tuple!(A, B, C, D, E, F,);
-impl_query_description_for_tuple!(A, B, C, D, E, F, G,);
-impl_query_description_for_tuple!(A, B, C, D, E, F, G, H,);
-impl_query_description_for_tuple!(A, B, C, D, E, F, G, H, I,);
-impl_query_description_for_tuple!(A, B, C, D, E, F, G, H, I, J,);
-impl_query_description_for_tuple!(A, B, C, D, E, F, G, H, I, J, K,);
-impl_query_description_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L,);
-impl_query_description_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M,);
-impl_query_description_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L, M, N,);
+macro_rules ! gen_for_tuple {
+    ($id:ident, [ $hd:ident ]) => {
+        $id!($hd,);
+    };
+
+    ($id:ident, [ $($tl:tt)* ]) => {
+        gen_for_tuple!($id, { $($tl)* });
+        $id!($($tl)*,);
+    };
+
+    ($id:ident, { $hd:ident, $($tl:tt)* }) => {
+        gen_for_tuple!($id, [ $($tl)* ]);
+    };
+}
+
+gen_for_tuple!(impl_query_description_for_tuple, [A, B, C, D, E, F, G, H, I, J, K, L, M, N]);
 
 pub struct Iter<'a, Q>
 where
